@@ -1,0 +1,126 @@
+# Traccia l'energia rigenerata dalla frenata rigenerativa della Leapmotor B10.
+#
+# Sensori sorgente:
+#   binary_sensor.leapmotor_regenerative_braking  - ON durante la regen
+#   sensor.leapmotor_charging_power               - potenza in kW durante regen
+#
+# Sensori prodotti:
+#   sensor.leapmotor_regen_power                - potenza regen istantanea
+#   sensor.leapmotor_regen_energy_total         - kWh cumulativi (mai resettato)
+#   sensor.leapmotor_regen_oggi                 - kWh oggi (reset mezzanotte)
+#   sensor.leapmotor_regen_settimana            - kWh settimana corrente
+#   sensor.leapmotor_regen_mese                 - kWh mese corrente
+#   sensor.leapmotor_regen_viaggio_corrente     - kWh regen viaggio in corso
+#   input_number.leapmotor_regen_ultimo_viaggio - kWh regen ultimo viaggio concluso
+
+template:
+  - sensor:
+      - name: "Leapmotor Regen Power"
+        unique_id: leapmotor_regen_power
+        unit_of_measurement: "kW"
+        device_class: power
+        state_class: measurement
+        icon: mdi:battery-charging-outline
+        state: >
+          {% if is_state("binary_sensor.leapmotor_regenerative_braking", "on") %}
+            {{ states("sensor.leapmotor_charging_power") | float(0) }}
+          {% else %}
+            0
+          {% endif %}
+
+sensor:
+  - platform: integration
+    source: sensor.leapmotor_regen_power
+    name: "Leapmotor Regen Energy Total"
+    unique_id: leapmotor_regen_energy_total
+    round: 3
+    method: trapezoidal
+
+utility_meter:
+  leapmotor_regen_oggi:
+    source: sensor.leapmotor_regen_energy_total
+    name: "Leapmotor Regen Oggi"
+    cycle: daily
+
+  leapmotor_regen_settimana:
+    source: sensor.leapmotor_regen_energy_total
+    name: "Leapmotor Regen Settimana"
+    cycle: weekly
+
+  leapmotor_regen_mese:
+    source: sensor.leapmotor_regen_energy_total
+    name: "Leapmotor Regen Mese"
+    cycle: monthly
+
+  leapmotor_regen_viaggio_corrente:
+    source: sensor.leapmotor_regen_energy_total
+    name: "Leapmotor Regen Viaggio Corrente"
+
+input_number:
+  leapmotor_regen_ultimo_viaggio:
+    name: "Leapmotor Regen Ultimo Viaggio"
+    min: 0
+    max: 999
+    step: 0.001
+    unit_of_measurement: "kWh"
+    icon: mdi:recycle
+
+automation:
+  - id: leapmotor_regen_reset_on_trip_start
+    alias: "Leapmotor Regen - Reset contatore a inizio viaggio"
+    description: "Azzera il meter regen quando inizia un nuovo viaggio (gear=D)"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: sensor.leapmotor_gear
+        to: "D"
+    condition:
+      - condition: template
+        value_template: >
+          {{
+            states("sensor.leapmotor_charging_status") != "charging"
+            and not is_state("binary_sensor.leapmotor_charge_cable_plugged_in", "on")
+            and not is_state("binary_sensor.leapmotor_dc_charge_cable_plugged_in", "on")
+          }}
+    action:
+      - service: utility_meter.reset
+        target:
+          entity_id: sensor.leapmotor_regen_viaggio_corrente
+
+  - id: leapmotor_regen_save_on_trip_end
+    alias: "Leapmotor Regen - Salva energia regen a fine viaggio"
+    description: "Salva i kWh regen del viaggio concluso in input_number"
+    mode: single
+    trigger:
+      - platform: state
+        entity_id: sensor.leapmotor_gear
+        to: "P"
+        for:
+          minutes: 1
+        id: parcheggio
+      - platform: state
+        entity_id: binary_sensor.leapmotor_charge_cable_plugged_in
+        to: "on"
+        for:
+          seconds: 2
+        id: cavo_ac
+      - platform: state
+        entity_id: binary_sensor.leapmotor_dc_charge_cable_plugged_in
+        to: "on"
+        for:
+          seconds: 2
+        id: cavo_dc
+    condition:
+      - condition: state
+        entity_id: input_boolean.leapmotor_viaggio_attivo
+        state: "on"
+      - condition: numeric_state
+        entity_id: sensor.leapmotor_speed
+        below: 1
+    action:
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_regen_ultimo_viaggio
+        data:
+          value: >
+            {{ states("sensor.leapmotor_regen_viaggio_corrente") | float(0) | round(3) }}

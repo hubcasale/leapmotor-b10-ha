@@ -1,0 +1,109 @@
+#################################################################
+# LEAPMOTOR - DALL'ULTIMA RICARICA COMPLETATA
+#################################################################
+
+shell_command:
+  leapmotor_since_completed_charge: "python3 /config/scripts/leapmotor_since_completed_charge.py"
+
+automation:
+  - id: leapmotor_update_since_completed_charge
+    alias: Leapmotor - Aggiorna dati da ultima ricarica completata
+    mode: restart
+    trigger:
+      - platform: time_pattern
+        minutes: "/5"
+
+      - platform: state
+        entity_id:
+          - input_datetime.leapmotor_ricarica_end
+          - input_datetime.leapmotor_trip_end
+          - sensor.leapmotor_precise_battery
+
+      - platform: event
+        event_type: homeassistant_started
+
+    action:
+      - service: shell_command.leapmotor_since_completed_charge
+
+      - delay:
+          seconds: 2
+
+      - service: homeassistant.update_entity
+        target:
+          entity_id: sensor.leapmotor_since_completed_charge_raw
+
+
+sensor:
+  - platform: rest
+    name: "Leapmotor Since Completed Charge Raw"
+    unique_id: leapmotor_since_completed_charge_raw
+    resource: "http://127.0.0.1:8123/local/leapmotor/since_completed_charge.json"
+    scan_interval: 300
+    value_template: >
+      {{ value_json.generated_at | default('unknown') }}
+    json_attributes:
+      - generated_at
+      - from
+      - to
+      - summary
+      - trips
+      - latest_trip
+    availability: >
+      {{ value_json is defined }}
+
+
+template:
+  - sensor:
+      - name: "Leapmotor Da Ultima Ricarica Completata Km"
+        unique_id: leapmotor_da_ultima_ricarica_completata_km
+        unit_of_measurement: "km"
+        icon: mdi:map-marker-distance
+        state: >
+          {{ (state_attr('sensor.leapmotor_since_completed_charge_raw', 'summary') or {}).get('km', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Completata Energia"
+        unique_id: leapmotor_da_ultima_ricarica_completata_energia
+        unit_of_measurement: "kWh"
+        icon: mdi:battery-minus
+        state: >
+          {{ (state_attr('sensor.leapmotor_since_completed_charge_raw', 'summary') or {}).get('kwh', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Completata Consumo"
+        unique_id: leapmotor_da_ultima_ricarica_completata_consumo
+        unit_of_measurement: "kWh/100km"
+        icon: mdi:speedometer
+        state: >
+          {{ (state_attr('sensor.leapmotor_since_completed_charge_raw', 'summary') or {}).get('cons_kwh_100km', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Completata Km Per kWh"
+        unique_id: leapmotor_da_ultima_ricarica_completata_km_per_kwh
+        unit_of_measurement: "km/kWh"
+        icon: mdi:leaf
+        state: >
+          {{ (state_attr('sensor.leapmotor_since_completed_charge_raw', 'summary') or {}).get('km_per_kwh', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Completata SOC Usato"
+        unique_id: leapmotor_da_ultima_ricarica_completata_soc_usato
+        unit_of_measurement: "%"
+        icon: mdi:battery-arrow-down
+        state: >
+          {{ (state_attr('sensor.leapmotor_since_completed_charge_raw', 'summary') or {}).get('soc_used', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Completata Viaggi"
+        unique_id: leapmotor_da_ultima_ricarica_completata_viaggi
+        icon: mdi:road-variant
+        state: >
+          {{ (state_attr('sensor.leapmotor_since_completed_charge_raw', 'summary') or {}).get('trips', 0) | int(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Completata Durata Guida"
+        unique_id: leapmotor_da_ultima_ricarica_completata_durata_guida
+        icon: mdi:clock-outline
+        state: >
+          {{ (state_attr('sensor.leapmotor_since_completed_charge_raw', 'summary') or {}).get('duration_label', '00:00') }}
+
+      - name: "Leapmotor Da Ultima Ricarica Completata SOC"
+        unique_id: leapmotor_da_ultima_ricarica_completata_soc
+        icon: mdi:battery
+        state: >
+          {% set s = state_attr('sensor.leapmotor_since_completed_charge_raw', 'summary') or {} %}
+          {{ s.get('soc_start', 0) | float(0) | round(1) }} → {{ s.get('soc_end', 0) | float(0) | round(1) }} %

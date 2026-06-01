@@ -1,0 +1,648 @@
+input_number:
+  leapmotor_trip_soc_iniziale:
+    name: Leapmotor Trip SOC Iniziale
+    icon: mdi:battery-start
+    min: 0
+    max: 100
+    step: 0.1
+    unit_of_measurement: "%"
+
+  leapmotor_trip_soc_finale:
+    name: Leapmotor Trip SOC Finale
+    icon: mdi:battery-end
+    min: 0
+    max: 100
+    step: 0.1
+    unit_of_measurement: "%"
+
+  leapmotor_trip_km_iniziali:
+    name: Leapmotor Trip KM Iniziali
+    icon: mdi:map-marker-distance
+    min: 0
+    max: 999999
+    step: 0.1
+    unit_of_measurement: "km"
+
+  leapmotor_trip_km_finali:
+    name: Leapmotor Trip KM Finali
+    icon: mdi:map-marker-check
+    min: 0
+    max: 999999
+    step: 0.1
+    unit_of_measurement: "km"
+
+  leapmotor_trip_energia:
+    name: Leapmotor Trip Energia
+    icon: mdi:lightning-bolt
+    min: 0
+    max: 200
+    step: 0.01
+    unit_of_measurement: "kWh"
+
+  leapmotor_trip_distanza:
+    name: Leapmotor Trip Distanza
+    icon: mdi:road-variant
+    min: 0
+    max: 2000
+    step: 0.1
+    unit_of_measurement: "km"
+
+  leapmotor_trip_consumo:
+    name: Leapmotor Trip Consumo
+    icon: mdi:chart-line
+    min: 0
+    max: 100
+    step: 0.1
+    unit_of_measurement: "kWh/100km"
+
+input_text:
+  leapmotor_last_trip:
+    name: Leapmotor Last Trip
+    max: 255
+
+input_datetime:
+  leapmotor_trip_start:
+    name: Leapmotor Trip Start
+    has_date: true
+    has_time: true
+
+  leapmotor_trip_end:
+    name: Leapmotor Trip End
+    has_date: true
+    has_time: true
+
+input_boolean:
+  leapmotor_viaggio_attivo:
+    name: Leapmotor Viaggio Attivo
+    icon: mdi:car-connected
+
+automation:
+
+  - id: leapmotor_reload_integration_on_invalid_soc
+    alias: Leapmotor - Reload integrazione se SOC non valido
+    description: "Ricarica l'intera integrazione Leapmotor se il SOC resta non valido"
+    mode: single
+
+    trigger:
+      - platform: state
+        entity_id: sensor.leapmotor_precise_battery
+        to:
+          - "unknown"
+          - "unavailable"
+        for:
+          minutes: 2
+
+      - platform: numeric_state
+        entity_id: sensor.leapmotor_precise_battery
+        below: 1
+        for:
+          minutes: 2
+
+    action:
+      - action: homeassistant.reload_config_entry
+        data:
+          entry_id: !secret leapmotor_entry_id
+
+      - delay:
+          minutes: 1
+
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: >
+                  {{
+                    states('sensor.leapmotor_precise_battery') in ['unknown', 'unavailable', 'none']
+                    or states('sensor.leapmotor_precise_battery') | float(0) < 1
+                  }}
+            sequence:
+              - action: homeassistant.reload_config_entry
+                data:
+                  entry_id: !secret leapmotor_entry_id
+
+              - delay:
+                  minutes: 1
+
+              - choose:
+                  - conditions:
+                      - condition: template
+                        value_template: >
+                          {{
+                            states('sensor.leapmotor_precise_battery') in ['unknown', 'unavailable', 'none']
+                            or states('sensor.leapmotor_precise_battery') | float(0) < 1
+                          }}
+                    sequence:
+                      - action: persistent_notification.create
+                        data:
+                          title: "Leapmotor SOC non valido"
+                          message: >
+                            Il SOC Leapmotor è ancora non valido dopo due reload integrazione.
+                            Stato attuale: {{ states('sensor.leapmotor_precise_battery') }}.
+
+
+  - id: leapmotor_Start_trip
+    alias: Leapmotor - Start Trip
+
+    trigger:
+      - platform: state
+        entity_id: sensor.leapmotor_gear
+        to: "D"
+
+    condition:
+      - condition: state
+        entity_id: input_boolean.leapmotor_viaggio_attivo
+        state: "off"
+
+      - condition: template
+        value_template: >
+          {{
+            states('sensor.leapmotor_charging_status') != 'charging'
+            and not is_state('binary_sensor.leapmotor_charge_cable_plugged_in', 'on')
+            and not is_state('binary_sensor.leapmotor_dc_charge_cable_plugged_in', 'on')
+          }}
+
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.leapmotor_viaggio_attivo
+
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.leapmotor_trip_start
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_trip_soc_iniziale
+        data:
+          value: >
+            {{ states('sensor.leapmotor_precise_battery') | float(0) }}
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_trip_km_iniziali
+        data:
+          value: >
+            {{ states('sensor.leapmotor_odometer') | float(0) }}
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_trip_soc_finale
+        data:
+          value: 0
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_trip_km_finali
+        data:
+          value: 0
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_trip_distanza
+        data:
+          value: 0
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_trip_energia
+        data:
+          value: 0
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_trip_consumo
+        data:
+          value: 0
+
+    mode: single
+
+  - id: leapmotor_end_trip
+    alias: Leapmotor - End Trip
+    trigger:
+      - platform: state
+        entity_id: sensor.leapmotor_gear
+        to: "P"
+        for:
+          minutes: 1
+        id: parcheggio
+
+      - platform: state
+        entity_id: binary_sensor.leapmotor_charge_cable_plugged_in
+        to: "on"
+        for:
+          seconds: 2
+        id: cavo_ac
+
+      - platform: state
+        entity_id: binary_sensor.leapmotor_dc_charge_cable_plugged_in
+        to: "on"
+        for:
+          seconds: 2
+        id: cavo_dc
+
+    condition:
+      - condition: state
+        entity_id: input_boolean.leapmotor_viaggio_attivo
+        state: "on"
+
+      - condition: numeric_state
+        entity_id: sensor.leapmotor_speed
+        below: 1
+
+    action:
+      - variables:
+          km_finali: >
+            {{ states('sensor.leapmotor_odometer') | float(0) }}
+
+          km_iniziali: >
+            {{ states('input_number.leapmotor_trip_km_iniziali') | float(0) }}
+
+          distanza: >
+            {{
+              (
+                states('sensor.leapmotor_odometer') | float(0)
+                -
+                states('input_number.leapmotor_trip_km_iniziali') | float(0)
+              ) | round(1)
+            }}
+
+          soc_finale: >
+            {{ states('sensor.leapmotor_precise_battery') | float(0) }}
+
+          soc_iniziale: >
+            {{ states('input_number.leapmotor_trip_soc_iniziale') | float(0) }}
+
+          energia: >
+            {% set e =
+              (
+                (
+                  states('input_number.leapmotor_trip_soc_iniziale') | float(0)
+                  -
+                  states('sensor.leapmotor_precise_battery') | float(0)
+                )
+                / 100
+              ) * 67
+            %}
+            {{ ([e, 0] | max) | round(2) }}
+
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.leapmotor_trip_end
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ distanza | float(0) > 0.5 }}"
+            sequence:
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.leapmotor_trip_soc_finale
+                data:
+                  value: "{{ soc_finale }}"
+
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.leapmotor_trip_km_finali
+                data:
+                  value: "{{ km_finali }}"
+
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.leapmotor_trip_distanza
+                data:
+                  value: "{{ distanza }}"
+
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.leapmotor_trip_energia
+                data:
+                  value: "{{ energia }}"
+
+              - service: input_number.set_value
+                target:
+                  entity_id: input_number.leapmotor_trip_consumo
+                data:
+                  value: >
+                    {% if distanza | float(0) > 0 %}
+                      {{ ((energia | float(0) / distanza | float(0)) * 100) | round(1) }}
+                    {% else %}
+                      0
+                    {% endif %}
+
+              - service: shell_command.leapmotor_append_trip
+
+              - delay:
+                  seconds: 3
+
+              - service: shell_command.leapmotor_export_trip_summary
+
+              # Vecchia logica since-last-charge disattivata: sostituita da leapmotor_charge_sessions.yaml
+              # - service: shell_command.leapmotor_generate_since_last_charge
+
+        default:
+          - service: input_text.set_value
+            target:
+              entity_id: input_text.leapmotor_last_trip
+            data:
+              value: >
+                Spostamento breve ignorato: {{ distanza | float(0) | round(2) }} km
+
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.leapmotor_viaggio_attivo
+
+    mode: single
+
+template:
+  - binary_sensor:
+      - name: "Leapmotor Cavo Ricarica Collegato"
+        unique_id: leapmotor_cavo_ricarica_collegato
+        device_class: plug
+        icon: >
+          {% if is_state('binary_sensor.leapmotor_dc_charge_cable_plugged_in', 'on') %}
+            mdi:ev-plug-ccs2
+          {% elif is_state('binary_sensor.leapmotor_charge_cable_plugged_in', 'on') %}
+            mdi:ev-plug-type2
+          {% else %}
+            mdi:power-plug-off
+          {% endif %}
+        state: >
+          {{
+            is_state('binary_sensor.leapmotor_charge_cable_plugged_in', 'on')
+            or is_state('binary_sensor.leapmotor_dc_charge_cable_plugged_in', 'on')
+          }}
+
+  - sensor:
+      - name: "Leapmotor Ultimo Viaggio Distanza"
+        unique_id: leapmotor_ultimo_viaggio_distanza
+        unit_of_measurement: "km"
+        state: >
+          {{ states('input_number.leapmotor_trip_distanza') }}
+
+      - name: "Leapmotor Ultimo Viaggio Energia"
+        unique_id: leapmotor_ultimo_viaggio_energia
+        unit_of_measurement: "kWh"
+        state: >
+          {{ states('input_number.leapmotor_trip_energia') }}
+
+      - name: "Leapmotor Ultimo Viaggio Consumo"
+        unique_id: leapmotor_ultimo_viaggio_consumo
+        unit_of_measurement: "kWh/100km"
+        state: >
+          {{ states('input_number.leapmotor_trip_consumo') }}
+
+      - name: "Leapmotor Ultimo Viaggio SOC Iniziale"
+        unique_id: leapmotor_ultimo_viaggio_soc_iniziale
+        unit_of_measurement: "%"
+        state: >
+          {{ states('input_number.leapmotor_trip_soc_iniziale') }}
+
+      - name: "Leapmotor Ultimo Viaggio SOC Finale"
+        unique_id: leapmotor_ultimo_viaggio_soc_finale
+        unit_of_measurement: "%"
+        state: >
+          {{ states('input_number.leapmotor_trip_soc_finale') }}
+
+      - name: "Leapmotor Ultimo Viaggio KM Iniziali"
+        unique_id: leapmotor_ultimo_viaggio_km_iniziali
+        unit_of_measurement: "km"
+        state: >
+          {{ states('input_number.leapmotor_trip_km_iniziali') }}
+
+      - name: "Leapmotor Ultimo Viaggio KM Finali"
+        unique_id: leapmotor_ultimo_viaggio_km_finali
+        unit_of_measurement: "km"
+        state: >
+          {{ states('input_number.leapmotor_trip_km_finali') }}
+
+      - name: "Leapmotor Stato Viaggio"
+        unique_id: leapmotor_stato_viaggio
+        state: >
+          {% if is_state('input_boolean.leapmotor_viaggio_attivo', 'on') %}
+            In viaggio
+          {% else %}
+            Parcheggiata
+          {% endif %}
+
+      - name: "Leapmotor Consumo Giorno"
+        unique_id: leapmotor_consumo_giorno
+        unit_of_measurement: "kWh/100km"
+
+        state: >
+          {% set km = states('sensor.leapmotor_km_giorno') | float(0) %}
+          {% set energia = states('sensor.leapmotor_energia_giorno') | float(0) %}
+
+          {% if km > 0 %}
+            {{ ((energia / km) * 100) | round(1) }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "Leapmotor Consumo Settimana"
+        unique_id: leapmotor_consumo_settimana
+        unit_of_measurement: "kWh/100km"
+
+        state: >
+          {% set km = states('sensor.leapmotor_km_settimana') | float(0) %}
+          {% set energia = states('sensor.leapmotor_energia_settimana') | float(0) %}
+
+          {% if km > 0 %}
+            {{ ((energia / km) * 100) | round(1) }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "Leapmotor Consumo Mese"
+        unique_id: leapmotor_consumo_mese
+        unit_of_measurement: "kWh/100km"
+
+        state: >
+          {% set km = states('sensor.leapmotor_km_mese') | float(0) %}
+          {% set energia = states('sensor.leapmotor_energia_mese') | float(0) %}
+
+          {% if km > 0 %}
+            {{ ((energia / km) * 100) | round(1) }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "Leapmotor Wallbox Power Filtered"
+        unique_id: leapmotor_wallbox_power_filtered
+        unit_of_measurement: "kW"
+
+        state: >
+          {% set ac_cable = is_state('binary_sensor.leapmotor_charge_cable_plugged_in', 'on') %}
+          {% set dc_cable = is_state('binary_sensor.leapmotor_dc_charge_cable_plugged_in', 'on') %}
+          {% set wallbox_power = states(states('input_text.leapmotor_wallbox_entity')) | float(0) %}
+
+          {% if
+            (ac_cable or dc_cable)
+            and is_state('sensor.leapmotor_charging_connection', 'charging')
+            and wallbox_power > 0
+          %}
+            {{ wallbox_power }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "Leapmotor Charging Power Filtered"
+        unique_id: leapmotor_charging_power_filtered
+        unit_of_measurement: "kW"
+
+        state: >
+          {% set ac_cable = is_state('binary_sensor.leapmotor_charge_cable_plugged_in', 'on') %}
+          {% set dc_cable = is_state('binary_sensor.leapmotor_dc_charge_cable_plugged_in', 'on') %}
+          {% set wallbox_power = states(states('input_text.leapmotor_wallbox_entity')) | float(0) %}
+          {% set car_power = states('sensor.leapmotor_charging_power') | float(0) %}
+
+          {% if
+            (ac_cable or dc_cable)
+            and is_state('sensor.leapmotor_charging_connection', 'charging')
+            and wallbox_power > 0
+          %}
+            {{ car_power }}
+          {% else %}
+            0
+          {% endif %}
+
+      - name: "Leapmotor Durata Viaggio"
+        unique_id: leapmotor_durata_viaggio
+
+        state: >
+          {% set start = states('input_datetime.leapmotor_trip_start') %}
+          {% set end = states('input_datetime.leapmotor_trip_end') %}
+
+          {% if start not in ['unknown','unavailable','']
+             and end not in ['unknown','unavailable',''] %}
+
+            {% set durata =
+              (
+                as_timestamp(end)
+                -
+                as_timestamp(start)
+              ) | int(0)
+            %}
+
+            {% set ore = (durata // 3600) %}
+            {% set minuti = ((durata % 3600) // 60) %}
+
+            {{ "%02d:%02d"|format(ore, minuti) }}
+
+          {% else %}
+            00:00
+          {% endif %}
+
+      - name: "Leapmotor Velocità Media"
+        unique_id: leapmotor_velocita_media
+        unit_of_measurement: "km/h"
+
+        state: >
+          {% set km =
+            states('input_number.leapmotor_trip_distanza') | float(0)
+          %}
+
+          {% set start = states('input_datetime.leapmotor_trip_start') %}
+          {% set end = states('input_datetime.leapmotor_trip_end') %}
+
+          {% if start not in ['unknown','unavailable','']
+             and end not in ['unknown','unavailable',''] %}
+
+            {% set durata_ore =
+              (
+                as_timestamp(end)
+                -
+                as_timestamp(start)
+              ) / 3600
+            %}
+
+            {% if durata_ore > 0 %}
+              {{ (km / durata_ore) | round(1) }}
+            {% else %}
+              0
+            {% endif %}
+
+          {% else %}
+            0
+          {% endif %}
+
+  - trigger:
+      - trigger: homeassistant
+        event: start
+
+      - trigger: state
+        entity_id: input_datetime.leapmotor_trip_end
+
+    sensor:
+      - name: "Leapmotor Trip Snapshot"
+        unique_id: leapmotor_trip_snapshot
+
+        state: "Trip Completed"
+
+        attributes:
+          timestamp: >
+            {{ states('input_datetime.leapmotor_trip_end') }}
+
+          km: >
+            {{ states('input_number.leapmotor_trip_distanza') }}
+
+          energia: >
+            {{ states('input_number.leapmotor_trip_energia') }}
+
+          consumo: >
+            {{ states('input_number.leapmotor_trip_consumo') }}
+
+          durata: >
+            {{ states('sensor.leapmotor_durata_viaggio') }}
+
+          velocita_media: >
+            {{ states('sensor.leapmotor_velocita_media') }}
+
+utility_meter:
+  leapmotor_km_giorno:
+    unique_id: leapmotor_km_giorno
+    source: sensor.leapmotor_odometer
+    cycle: daily
+
+  leapmotor_km_settimana:
+    unique_id: leapmotor_km_settimana
+    source: sensor.leapmotor_odometer
+    cycle: weekly
+
+  leapmotor_km_mese:
+    unique_id: leapmotor_km_mese
+    source: sensor.leapmotor_odometer
+    cycle: monthly
+
+  leapmotor_energia_giorno:
+    unique_id: leapmotor_energia_giorno
+    source: sensor.leapmotor_ultimo_viaggio_energia
+    cycle: daily
+    delta_values: true
+
+  leapmotor_energia_settimana:
+    unique_id: leapmotor_energia_settimana
+    source: sensor.leapmotor_ultimo_viaggio_energia
+    cycle: weekly
+    delta_values: true
+
+  leapmotor_energia_mese:
+    unique_id: leapmotor_energia_mese
+    source: sensor.leapmotor_ultimo_viaggio_energia
+    cycle: monthly
+    delta_values: true
+    
+shell_command:
+  leapmotor_export_trip_summary: "python3 /config/leapmotor/export_trip_summary.py"
+    
+sensor:
+  - platform: command_line
+    name: Leapmotor Trip History
+    unique_id: leapmotor_trip_history
+    command: "cat /config/www/leapmotor/trip_summary.json"
+    value_template: "{{ value_json.generated_at | default('N/D') }}"
+    json_attributes:
+      - trips
+    scan_interval: 60

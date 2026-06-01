@@ -1,0 +1,55 @@
+input_boolean:
+  leapmotor_auto_prestata:
+    name: Leapmotor Auto prestata
+    icon: mdi:account-arrow-right
+    
+
+script:
+  leapmotor_climate_cold:
+    alias: "Leapmotor - Clima Freddo"
+    mode: single
+    sequence:
+      - action: leapmotor.set_climate
+        data:
+          mode: cold
+          temperature: "{{ states('input_number.leapmotor_climate_temperature') | int(22) }}"
+          fan_speed: "{{ states('input_number.leapmotor_climate_fan_speed') | int(3) }}"
+          recirculate: false
+          windshield_defrost: false
+
+  leapmotor_climate_hot:
+    alias: "Leapmotor - Clima Caldo"
+    mode: single
+    sequence:
+      - action: leapmotor.set_climate
+        data:
+          mode: hot
+          temperature: "{{ states('input_number.leapmotor_climate_temperature') | int(22) }}"
+          fan_speed: "{{ states('input_number.leapmotor_climate_fan_speed') | int(3) }}"
+          recirculate: false
+          windshield_defrost: false
+
+  leapmotor_climate_wind:
+    alias: "Leapmotor - Clima Ventilazione"
+    mode: single
+    sequence:
+      - action: leapmotor.set_climate
+        data:
+          mode: wind
+          temperature: "{{ states('input_number.leapmotor_climate_temperature') | int(22) }}"
+          fan_speed: "{{ states('input_number.leapmotor_climate_fan_speed') | int(3) }}"
+          recirculate: false
+          windshield_defrost: false
+
+  leapmotor_climate_defrost:
+    alias: "Leapmotor - Clima Defrost"
+    mode: single
+    sequence:
+      - action: leapmotor.set_climate
+        data:
+          mode: hot
+          temperature: "{{ states('input_number.leapmotor_climate_temperature') | int(22) }}"
+          fan_speed: "{{ states('input_number.leapmotor_climate_fan_speed') | int(3) }}"
+          recirculate: false
+          windshield_defrost: true    
+    

@@ -1,0 +1,40 @@
+input_boolean:
+  leapmotor_boost_polling:
+    name: Leapmotor Boost Polling
+    icon: mdi:refresh-auto
+
+automation:
+  - id: leapmotor_boost_polling
+    alias: Leapmotor - Boost Polling
+    trigger:
+      - platform: time_pattern
+        seconds: "/5"
+    condition:
+      - condition: state
+        entity_id: input_boolean.leapmotor_boost_polling
+        state: "on"
+      - condition: state
+        entity_id: input_boolean.leapmotor_viaggio_attivo
+        state: "off"
+    action:
+      - service: homeassistant.update_entity
+        target:
+          entity_id:
+            - sensor.leapmotor_gear
+            - sensor.leapmotor_precise_battery
+            - sensor.leapmotor_odometer
+            - sensor.leapmotor_speed
+    mode: single
+    max_exceeded: silent
+
+  - id: leapmotor_boost_polling_stop
+    alias: Leapmotor - Boost Polling Stop
+    trigger:
+      - platform: state
+        entity_id: input_boolean.leapmotor_viaggio_attivo
+        to: "on"
+    action:
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.leapmotor_boost_polling
+    mode: single

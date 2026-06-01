@@ -1,0 +1,74 @@
+shell_command:
+  leapmotor_append_trip: >-
+    python3 /config/leapmotor/append_trip.py
+    "{{ states('input_datetime.leapmotor_trip_start') }}"
+    "{{ states('input_datetime.leapmotor_trip_end') }}"
+    "{{ states('sensor.leapmotor_durata_viaggio') }}"
+    "{{ states('input_number.leapmotor_trip_km_iniziali') }}"
+    "{{ states('input_number.leapmotor_trip_km_finali') }}"
+    "{{ states('input_number.leapmotor_trip_distanza') }}"
+    "{{ states('input_number.leapmotor_trip_energia') }}"
+    "{{ states('input_number.leapmotor_trip_consumo') }}"
+    "{{ states('input_number.leapmotor_trip_soc_iniziale') }}"
+    "{{ states('input_number.leapmotor_trip_soc_finale') }}"
+    "{{ states('sensor.leapmotor_velocita_media') }}"
+    "{{ state_attr('weather.openweathermap', 'temperature') }}"
+
+script:
+
+  leapmotor_toggle_portiere:
+    alias: "Leapmotor Toggle Portiere"
+    sequence:
+      - service: >
+          {% if is_state('lock.leapmotor_lock', 'locked') %}lock.unlock{% else %}lock.lock{% endif %}
+        target:
+          entity_id: lock.leapmotor_lock
+    mode: single
+
+  leapmotor_toggle_baule:
+    alias: "Leapmotor Toggle Baule"
+    sequence:
+      - service: button.press
+        target:
+          entity_id: >
+            {% if is_state('binary_sensor.leapmotor_trunk', 'off') %}
+              button.leapmotor_open_trunk
+            {% else %}
+              button.leapmotor_close_trunk
+            {% endif %}
+    mode: single
+
+  leapmotor_toggle_finestrini:
+    alias: "Leapmotor Toggle Finestrini"
+    sequence:
+      - variables:
+          aperti: >
+            {% set w = [
+              is_state('binary_sensor.leapmotor_front_left_window', 'on'),
+              is_state('binary_sensor.leapmotor_front_right_window', 'on'),
+              is_state('binary_sensor.leapmotor_rear_left_window', 'on'),
+              is_state('binary_sensor.leapmotor_rear_right_window', 'on')
+            ] %}
+            {{ w | select('equalto', true) | list | count > 0 }}
+      - service: button.press
+        target:
+          entity_id: >
+            {% if not aperti %}
+              button.leapmotor_open_windows
+            {% else %}
+              button.leapmotor_close_windows
+            {% endif %}
+    mode: single
+
+  leapmotor_toggle_tetto:
+    alias: "Leapmotor Toggle Tetto"
+    sequence:
+      - service: button.press
+        target:
+          entity_id: >
+            {% if is_state('binary_sensor.leapmotor_skylight_open', 'off') %}
+              button.leapmotor_open_sunshade
+            {% else %}
+              button.leapmotor_close_sunshade
+            {% endif %}
+    mode: single

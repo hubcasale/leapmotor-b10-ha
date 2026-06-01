@@ -1,0 +1,153 @@
+#################################################################
+# LEAPMOTOR - CHARGE EFFICIENCY SUMMARY
+#################################################################
+
+template:
+  - trigger:
+      - platform: time_pattern
+        minutes: "/5"
+
+      - platform: event
+        event_type: homeassistant_started
+
+      - platform: state
+        entity_id:
+          - sensor.leapmotor_charge_efficiency_raw
+          - input_boolean.leapmotor_ricarica_attiva
+          - sensor.leapmotor_precise_battery
+          - sensor.leapmotor_charging_power_filtered
+          - sensor.leapmotor_wallbox_power_filtered
+
+    sensor:
+      - name: "Leapmotor Ricarica Stato Dettaglio"
+        unique_id: leapmotor_ricarica_stato_dettaglio
+        icon: mdi:ev-station
+        state: >
+          {% set data = states('sensor.leapmotor_charge_efficiency_raw') %}
+          {% if data in ['unknown', 'unavailable', 'none', ''] %}
+            Non disponibile
+          {% else %}
+            {% set s = state_attr('sensor.leapmotor_charge_efficiency_raw', 'current_charge_session') %}
+          {% if s is mapping %}
+            {% if s.get('status') == 'in_progress' %}
+              In ricarica
+            {% elif s.get('status') == 'completed' %}
+              Completata
+            {% else %}
+              Nessuna sessione
+            {% endif %}
+          {% else %}
+            Non disponibile
+          {% endif %}
+          {% endif %}
+
+      - name: "Leapmotor Ricarica SOC Start"
+        unique_id: leapmotor_ricarica_soc_start_summary
+        unit_of_measurement: "%"
+        icon: mdi:battery-arrow-up
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'current_charge_session') or {}).get('soc_start', 0) | float(0) }}
+
+      - name: "Leapmotor Ricarica SOC Attuale Fine"
+        unique_id: leapmotor_ricarica_soc_current_or_end_summary
+        unit_of_measurement: "%"
+        icon: mdi:battery-check
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'current_charge_session') or {}).get('soc_current_or_end', 0) | float(0) }}
+
+      - name: "Leapmotor Ricarica SOC Aggiunto"
+        unique_id: leapmotor_ricarica_soc_added_summary
+        unit_of_measurement: "%"
+        icon: mdi:battery-plus
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'current_charge_session') or {}).get('soc_added', 0) | float(0) }}
+
+      - name: "Leapmotor Ricarica Energia Stimata"
+        unique_id: leapmotor_ricarica_energia_stimata_summary
+        unit_of_measurement: "kWh"
+        icon: mdi:lightning-bolt
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'current_charge_session') or {}).get('estimated_kwh_added', 0) | float(0) }}
+
+      - name: "Leapmotor Ricarica Potenza Media"
+        unique_id: leapmotor_ricarica_potenza_media_summary
+        unit_of_measurement: "kW"
+        device_class: power
+        state_class: measurement
+        icon: mdi:gauge
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'current_charge_session') or {}).get('avg_charge_power_kw', 0) | float(0) }}
+
+      - name: "Leapmotor Ricarica Durata"
+        unique_id: leapmotor_ricarica_durata_summary
+        icon: mdi:timer-outline
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'current_charge_session') or {}).get('duration_label', '00:00') }}
+
+      - name: "Leapmotor Da Ultima Ricarica Km"
+        unique_id: leapmotor_da_ultima_ricarica_km
+        unit_of_measurement: "km"
+        device_class: distance
+        state_class: measurement
+        icon: mdi:map-marker-distance
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'since_previous_charge') or {}).get('km', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Energia"
+        unique_id: leapmotor_da_ultima_ricarica_energia
+        unit_of_measurement: "kWh"
+        icon: mdi:battery-minus
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'since_previous_charge') or {}).get('kwh', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Consumo"
+        unique_id: leapmotor_da_ultima_ricarica_consumo
+        unit_of_measurement: "kWh/100km"
+        state_class: measurement
+        icon: mdi:speedometer
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'since_previous_charge') or {}).get('cons_kwh_100km', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Km Per kWh"
+        unique_id: leapmotor_da_ultima_ricarica_km_per_kwh
+        unit_of_measurement: "km/kWh"
+        state_class: measurement
+        icon: mdi:leaf
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'since_previous_charge') or {}).get('km_per_kwh', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica SOC Usato"
+        unique_id: leapmotor_da_ultima_ricarica_soc_usato
+        unit_of_measurement: "%"
+        state_class: measurement
+        icon: mdi:battery-arrow-down
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'since_previous_charge') or {}).get('soc_used', 0) | float(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Viaggi"
+        unique_id: leapmotor_da_ultima_ricarica_viaggi
+        icon: mdi:road-variant
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'since_previous_charge') or {}).get('trips', 0) | int(0) }}
+
+      - name: "Leapmotor Da Ultima Ricarica Durata Guida"
+        unique_id: leapmotor_da_ultima_ricarica_durata_guida
+        icon: mdi:clock-outline
+        state: >
+          {{ (state_attr('sensor.leapmotor_charge_efficiency_raw', 'since_previous_charge') or {}).get('duration_label', '00:00') }}
+
+sensor:
+  - platform: rest
+    name: "Leapmotor Charge Efficiency Raw"
+    unique_id: leapmotor_charge_efficiency_raw
+    resource: "http://127.0.0.1:8123/local/leapmotor/charge_efficiency_summary.json"
+    scan_interval: 300
+    value_template: >
+      {{ value_json.generated_at | default('unknown') }}
+    json_attributes:
+      - generated_at
+      - battery_capacity_kwh
+      - current_charge_session
+      - since_previous_charge
+    availability: >
+      {{ value_json is defined }}

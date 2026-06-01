@@ -1,0 +1,57 @@
+template:
+
+  - sensor:
+
+      - name: "Leapmotor Ultimo Viaggio Start"
+        unique_id: leapmotor_ultimo_viaggio_start
+        state: >
+          {% set trips = state_attr('sensor.leapmotor_trip_history', 'trips') %}
+          {% if trips %}
+            {% set year  = trips.keys() | list | sort | last %}
+            {% set month = trips[year].keys() | list | sort | last %}
+            {% set day   = trips[year][month].keys() | list | sort | last %}
+            {{ trips[year][month][day][-1].start[11:16] }}
+          {% else %}
+            N/D
+          {% endif %}
+
+      - name: "Leapmotor Ultimo Viaggio End"
+        unique_id: leapmotor_ultimo_viaggio_end
+        state: >
+          {% set trips = state_attr('sensor.leapmotor_trip_history', 'trips') %}
+          {% if trips %}
+            {% set year  = trips.keys() | list | sort | last %}
+            {% set month = trips[year].keys() | list | sort | last %}
+            {% set day   = trips[year][month].keys() | list | sort | last %}
+            {{ trips[year][month][day][-1].end[11:16] }}
+          {% else %}
+            N/D
+          {% endif %}
+
+      - name: "Leapmotor Ultimo Viaggio Temperatura"
+        unique_id: leapmotor_ultimo_viaggio_temperatura
+        unit_of_measurement: "°C"
+        state: >
+          {% set trips = state_attr('sensor.leapmotor_trip_history', 'trips') %}
+          {% if trips %}
+            {% set year  = trips.keys() | list | sort | last %}
+            {% set month = trips[year].keys() | list | sort | last %}
+            {% set day   = trips[year][month].keys() | list | sort | last %}
+            {{ trips[year][month][day][-1].temperatura }}
+          {% else %}
+            0
+          {% endif %}
+
+input_number:
+  leapmotor_battery_capacity:
+    name: "Leapmotor Battery Capacity (kWh)"
+    min: 1
+    max: 100
+    step: 0.1
+    initial: 67.1
+
+input_text:
+  leapmotor_wallbox_entity:
+    name: "Leapmotor Wallbox Power Entity"
+    initial: "sensor.wallbox_pulsarplus_sn_YOURSERIAL_potenza_di_carica"
+    max: 100

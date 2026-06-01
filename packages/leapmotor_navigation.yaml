@@ -1,0 +1,71 @@
+input_text:
+  leapmotor_nav_address:
+    name: "Leapmotor Nav — Via / Indirizzo"
+    max: 150
+    initial: ""
+
+  leapmotor_nav_city:
+    name: "Leapmotor Nav — Città"
+    max: 100
+    initial: ""
+
+  leapmotor_nav_query:
+    name: "Leapmotor Nav — Cerca destinazione"
+    max: 255
+    initial: ""
+
+  leapmotor_nav_label:
+    name: "Leapmotor Nav — Indirizzo verificato"
+    max: 255
+    initial: "—"
+
+  leapmotor_nav_status:
+    name: "Leapmotor Nav — Stato"
+    max: 20
+    initial: "idle"
+
+input_number:
+  leapmotor_nav_lat:
+    name: "Leapmotor Nav — Latitudine"
+    min: -90
+    max: 90
+    step: 0.000001
+    initial: 45.443170
+
+  leapmotor_nav_lon:
+    name: "Leapmotor Nav — Longitudine"
+    min: -180
+    max: 180
+    step: 0.000001
+    initial: 9.124848
+
+shell_command:
+  leapmotor_geocode: >
+    python3 /config/leapmotor/geocode_destination.py
+    "{{ states('input_text.leapmotor_nav_address') }}"
+    "{{ states('input_text.leapmotor_nav_city') }}"
+
+script:
+  leapmotor_nav_search:
+    alias: "Leapmotor Nav — Cerca indirizzo"
+    sequence:
+      - action: shell_command.leapmotor_geocode
+        data: {}
+
+  leapmotor_nav_send:
+    alias: "Leapmotor Nav — Invia al navigatore"
+    sequence:
+      - action: input_text.set_value
+        data:
+          entity_id: input_text.leapmotor_nav_status
+          value: sending
+      - action: leapmotor.send_destination
+        data:
+          name: "{{ states('input_text.leapmotor_nav_label')[:30] }}"
+          address: "{{ states('input_text.leapmotor_nav_address') }}, {{ states('input_text.leapmotor_nav_city') }}"
+          latitude: "{{ states('input_number.leapmotor_nav_lat') | float }}"
+          longitude: "{{ states('input_number.leapmotor_nav_lon') | float }}"
+      - action: input_text.set_value
+        data:
+          entity_id: input_text.leapmotor_nav_status
+          value: sent

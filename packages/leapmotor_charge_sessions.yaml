@@ -1,0 +1,296 @@
+input_boolean:
+  leapmotor_ricarica_attiva:
+    name: Leapmotor Ricarica Attiva
+    icon: mdi:ev-plug-type2
+
+input_datetime:
+  leapmotor_ricarica_start:
+    name: Leapmotor Ricarica Start
+    has_date: true
+    has_time: true
+
+  leapmotor_ricarica_end:
+    name: Leapmotor Ricarica End
+    has_date: true
+    has_time: true
+
+input_number:
+  leapmotor_ricarica_soc_start:
+    name: Leapmotor Ricarica SOC Start
+    icon: mdi:battery-arrow-up
+    min: 0
+    max: 100
+    step: 0.1
+    unit_of_measurement: "%"
+
+  leapmotor_ricarica_soc_end:
+    name: Leapmotor Ricarica SOC End
+    icon: mdi:battery-check
+    min: 0
+    max: 100
+    step: 0.1
+    unit_of_measurement: "%"
+
+  leapmotor_ricarica_soc_added:
+    name: Leapmotor Ricarica SOC Aggiunto
+    icon: mdi:battery-plus
+    min: 0
+    max: 100
+    step: 0.1
+    unit_of_measurement: "%"
+
+  leapmotor_ricarica_kwh_added:
+    name: Leapmotor Ricarica kWh Aggiunti
+    icon: mdi:lightning-bolt
+    min: 0
+    max: 100
+    step: 0.01
+    unit_of_measurement: "kWh"
+
+template:
+  - sensor:
+      - name: "Leapmotor Ultima Ricarica Stato"
+        unique_id: leapmotor_ultima_ricarica_stato
+        icon: mdi:ev-plug-type2
+        state: >
+          {% if is_state('input_boolean.leapmotor_ricarica_attiva', 'on') %}
+            In ricarica
+          {% elif states('input_number.leapmotor_ricarica_soc_added') | float(0) > 0 %}
+            Completata
+          {% else %}
+            Nessuna sessione
+          {% endif %}
+
+      - name: "Leapmotor Ultima Ricarica SOC"
+        unique_id: leapmotor_ultima_ricarica_soc
+        unit_of_measurement: "%"
+        icon: mdi:battery-plus
+        state: >
+          {{ states('input_number.leapmotor_ricarica_soc_added') | float(0) | round(1) }}
+
+      - name: "Leapmotor Ultima Ricarica Energia"
+        unique_id: leapmotor_ultima_ricarica_energia
+        unit_of_measurement: "kWh"
+        icon: mdi:lightning-bolt
+        state: >
+          {{ states('input_number.leapmotor_ricarica_kwh_added') | float(0) | round(2) }}
+
+      - name: "Leapmotor Ultima Ricarica Durata"
+        unique_id: leapmotor_ultima_ricarica_durata
+        icon: mdi:timer-outline
+        state: >
+          {% set start = states('input_datetime.leapmotor_ricarica_start') %}
+          {% set end = states('input_datetime.leapmotor_ricarica_end') %}
+          {% if start in ['unknown', 'unavailable', 'none'] or end in ['unknown', 'unavailable', 'none'] %}
+            00:00
+          {% else %}
+            {% set s = as_timestamp(start, 0) %}
+            {% set e = as_timestamp(end, 0) %}
+            {% set diff = (e - s) | int(0) %}
+            {% if diff <= 0 %}
+              00:00
+            {% else %}
+              {% set h = diff // 3600 %}
+              {% set m = (diff % 3600) // 60 %}
+              {{ '%02d:%02d' | format(h, m) }}
+            {% endif %}
+          {% endif %}
+
+automation:
+  - id: leapmotor_start_charge_session
+    alias: Leapmotor - Start ricarica reale
+    description: "Registra l'inizio della ricarica quando viene collegato il cavo AC/DC"
+    mode: single
+
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.leapmotor_cavo_ricarica_collegato
+        to: "on"
+        for:
+          seconds: 5
+
+    condition:
+      - condition: state
+        entity_id: input_boolean.leapmotor_ricarica_attiva
+        state: "off"
+
+      - condition: state
+        entity_id: input_boolean.leapmotor_viaggio_attivo
+        state: "off"
+
+      - condition: template
+        value_template: >
+          {{
+            states('sensor.leapmotor_precise_battery') not in ['unknown', 'unavailable', 'none']
+            and states('sensor.leapmotor_precise_battery') | float(0) > 0
+          }}
+
+    action:
+      - service: input_boolean.turn_on
+        target:
+          entity_id: input_boolean.leapmotor_ricarica_attiva
+
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.leapmotor_ricarica_start
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_ricarica_soc_start
+        data:
+          value: "{{ states('sensor.leapmotor_precise_battery') | float(0) }}"
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_ricarica_soc_end
+        data:
+          value: 0
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_ricarica_soc_added
+        data:
+          value: 0
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_ricarica_kwh_added
+        data:
+          value: 0
+
+  - id: leapmotor_end_charge_session
+    alias: Leapmotor - Fine ricarica reale
+    description: "Chiude la ricarica quando termina davvero, anche se il cavo resta collegato"
+    mode: single
+
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.leapmotor_cavo_ricarica_collegato
+        to: "off"
+        for:
+          seconds: 10
+        id: cavo_scollegato
+
+      - platform: state
+        entity_id: binary_sensor.leapmotor_fully_charged
+        to: "on"
+        for:
+          minutes: 2
+        id: fully_charged
+
+      - platform: state
+        entity_id: binary_sensor.leapmotor_charging
+        to: "off"
+        for:
+          minutes: 10
+        id: charging_off_stabile
+
+      - platform: numeric_state
+        entity_id: sensor.leapmotor_charging_power
+        below: 0.1
+        for:
+          minutes: 10
+        id: potenza_zero_stabile
+
+    condition:
+      - condition: state
+        entity_id: input_boolean.leapmotor_ricarica_attiva
+        state: "on"
+
+      - condition: template
+        value_template: >
+          {{
+            states('sensor.leapmotor_precise_battery') not in ['unknown', 'unavailable', 'none']
+            and states('sensor.leapmotor_precise_battery') | float(0) > 0
+          }}
+
+      - condition: template
+        value_template: >
+          {% set trigger_id = trigger.id %}
+          {% set soc_start = states('input_number.leapmotor_ricarica_soc_start') | float(0) %}
+          {% set soc_now = states('sensor.leapmotor_precise_battery') | float(0) %}
+          {% set soc_added = soc_now - soc_start %}
+
+          {% if trigger_id == 'cavo_scollegato' %}
+            true
+          {% elif trigger_id == 'fully_charged' and soc_added >= 0.5 %}
+            true
+          {% elif trigger_id in ['charging_off_stabile', 'potenza_zero_stabile']
+                and is_state('binary_sensor.leapmotor_cavo_ricarica_collegato', 'on')
+                and soc_added >= 0.5 %}
+            true
+          {% else %}
+            false
+          {% endif %}
+
+    action:
+      - variables:
+          soc_start: >
+            {{ states('input_number.leapmotor_ricarica_soc_start') | float(0) }}
+
+          soc_end: >
+            {{ states('sensor.leapmotor_precise_battery') | float(0) }}
+
+          soc_added: >
+            {% set added =
+              (
+                states('sensor.leapmotor_precise_battery') | float(0)
+                -
+                states('input_number.leapmotor_ricarica_soc_start') | float(0)
+              )
+            %}
+            {{ ([added, 0] | max) | round(1) }}
+
+          kwh_added: >
+            {% set added =
+              (
+                states('sensor.leapmotor_precise_battery') | float(0)
+                -
+                states('input_number.leapmotor_ricarica_soc_start') | float(0)
+              )
+            %}
+            {% set kwh = (added / 100) * 67 %}
+            {{ ([kwh, 0] | max) | round(2) }}
+
+      - service: input_datetime.set_datetime
+        target:
+          entity_id: input_datetime.leapmotor_ricarica_end
+        data:
+          datetime: "{{ now().strftime('%Y-%m-%d %H:%M:%S') }}"
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_ricarica_soc_end
+        data:
+          value: "{{ soc_end }}"
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_ricarica_soc_added
+        data:
+          value: "{{ soc_added }}"
+
+      - service: input_number.set_value
+        target:
+          entity_id: input_number.leapmotor_ricarica_kwh_added
+        data:
+          value: "{{ kwh_added }}"
+
+      - service: input_boolean.turn_off
+        target:
+          entity_id: input_boolean.leapmotor_ricarica_attiva
+
+      - choose:
+          - conditions:
+              - condition: template
+                value_template: "{{ soc_added | float(0) >= 0.5 }}"
+            sequence:
+              - service: persistent_notification.create
+                data:
+                  title: "Leapmotor ricarica completata"
+                  message: >
+                    Ricarica registrata.
+                    SOC: {{ soc_start | float(0) | round(1) }}% → {{ soc_end | float(0) | round(1) }}%.
+                    Aggiunti: {{ soc_added | float(0) | round(1) }}% · {{ kwh_added | float(0) | round(2) }} kWh.
