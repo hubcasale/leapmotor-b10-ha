@@ -41,7 +41,7 @@ input_number:
 
 shell_command:
   leapmotor_geocode: >
-    python3 /config/leapmotor/geocode_destination.py
+    python3 /config/custom_components/leapmotor_b10/scripts/geocode_destination.py
     "{{ states('input_text.leapmotor_nav_address') }}"
     "{{ states('input_text.leapmotor_nav_city') }}"
 

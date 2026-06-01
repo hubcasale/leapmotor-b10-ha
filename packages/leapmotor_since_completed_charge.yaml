@@ -3,7 +3,7 @@
 #################################################################
 
 shell_command:
-  leapmotor_since_completed_charge: "python3 /config/scripts/leapmotor_since_completed_charge.py"
+  leapmotor_since_completed_charge: "python3 /config/custom_components/leapmotor_b10/scripts/leapmotor_since_completed_charge.py"
 
 automation:
   - id: leapmotor_update_since_completed_charge

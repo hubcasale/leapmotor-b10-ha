@@ -1,6 +1,6 @@
 shell_command:
   leapmotor_append_trip: >-
-    python3 /config/leapmotor/append_trip.py
+    python3 /config/custom_components/leapmotor_b10/scripts/append_trip.py
     "{{ states('input_datetime.leapmotor_trip_start') }}"
     "{{ states('input_datetime.leapmotor_trip_end') }}"
     "{{ states('sensor.leapmotor_durata_viaggio') }}"

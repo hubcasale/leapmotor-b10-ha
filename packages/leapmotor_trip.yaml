@@ -635,7 +635,7 @@ utility_meter:
     delta_values: true
     
 shell_command:
-  leapmotor_export_trip_summary: "python3 /config/leapmotor/export_trip_summary.py"
+  leapmotor_export_trip_summary: "python3 /config/custom_components/leapmotor_b10/scripts/export_trip_summary.py"
     
 sensor:
   - platform: command_line
